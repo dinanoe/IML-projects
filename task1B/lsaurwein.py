@@ -4,8 +4,7 @@
 import numpy as np
 import pandas as pd
 
-
-def transform_data(X):
+def transform_data(X: np.ndarray) -> np.ndarray:
     """
     This function transforms the 5 input features of matrix X (x_i denoting the i-th component of X) 
     into 21 new features phi(X) in the following manner:
@@ -24,12 +23,24 @@ def transform_data(X):
     X_transformed: array of floats: dim = (700,21), transformed input with 21 features
     """
     X_transformed = np.zeros((700, 21))
-    # TODO: Enter your code here
+    # Linear
+    for i in range(5):
+        X_transformed[:, i] = X[:, i]
+    # Quadratic
+    for i in range(5):
+        X_transformed[:, i+5] = X[:, i]**2
+    # Exponential
+    for i in range(5):
+        X_transformed[:, i+10] = np.exp(X[:, i])
+    # Cosine
+    for i in range(5):
+        X_transformed[:, i+15] = np.cos(X[:, i])
+    X_transformed[:, 20] = np.ones((700, ))
     assert X_transformed.shape == (700, 21)
     return X_transformed
 
 
-def fit(X, y):
+def fit(X: np.ndarray, y: np.ndarray) -> np.ndarray:
     """
     This function receives training data points, transform them, and then fits the linear regression on this 
     transformed data. Finally, it outputs the weights of the fitted linear regression. 
@@ -43,8 +54,9 @@ def fit(X, y):
     ----------
     w: array of floats: dim = (21,), optimal parameters of linear regression
     """
-    w = np.zeros((21,))
-    X_transformed = transform_data(X)
+    X = transform_data(X)
+    w = np.linalg.inv(X.T.dot(X)).dot(X.T.dot(y))
+
     # TODO: Enter your code here
     assert w.shape == (21,)
     return w
