@@ -1,10 +1,10 @@
-# This serves as a template which will guide you through the implementation of this task.  It is advised
-# to first read the whole template and get a sense of the overall structure of the code before trying to fill in any of the TODO gaps
-# First, we import necessary libraries:
+"""
+    Uses default methods, test all of them to get the best performing one
+"""
 import numpy as np
 import pandas as pd
-import random
 from sklearn.model_selection import KFold
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
 
 def calculate_RMSE(w: np.ndarray, X: np.ndarray, y: np.ndarray) -> float:
     """This function takes test data points (X and y), and computes the empirical RMSE of 
@@ -65,6 +65,41 @@ def transform_data(X: np.ndarray) -> np.ndarray:
     return X_transformed
 
 
+def fit_with_function(X, y, Type, fold, λ = None) -> np.ndarray:
+    best_rmse = np.inf
+    best_w = None
+
+    def fit_with_lambda(λ, train, test):
+        nonlocal best_rmse, best_w
+        if λ:
+            model = Type(alpha=λ, max_iter=100000)
+        else:
+            model = Type()
+        model.fit(X[train], y[train])
+        rmse = calculate_RMSE(model.coef_, X[test], y[test])
+        if best_rmse > rmse:
+            best_rmse = rmse
+            best_w = model.coef_
+
+    def fit_with_fold(fold: int):
+        nonlocal best_rmse, best_w
+        kf = KFold(n_splits=fold)
+        for train, test in kf.split(X):   
+            if type(λ) == list:
+                for i in np.arange(λ[0], λ[1], 0.001):   
+                    fit_with_lambda(i, train, test)  
+            else:
+                fit_with_lambda(λ, train, test)  
+
+    if type(fold) == list:
+        for f in range(fold[0], fold[1]):
+            fit_with_fold(f)
+    else:
+        fit_with_fold(fold)
+    return best_w, best_rmse
+        
+
+
 def fit(X: np.ndarray, y: np.ndarray) -> np.ndarray:
     """
     This function receives training data points, transform them, and then fits the linear regression on this 
@@ -80,48 +115,22 @@ def fit(X: np.ndarray, y: np.ndarray) -> np.ndarray:
     w: array of floats: dim = (21,), optimal parameters of linear regression
     """
     X = transform_data(X)
-    ln = LinearRegression(X, y)
-    w = ln.fit_linear()
-    for i in range(100):
-        ridge = ln.fit_ridge([10, 1000], [3, 30], i)
-    assert w.shape == (21,)
-    return ridge
+    #w_linear, rmse_linear = fit_with_function(X, y, LinearRegression, [2, 50])
+    #print("linear", rmse_linear)
+    #w_ridge, rmse_ridge = fit_with_function(X, y, Ridge, 13, [10, 300])
+    #print(w_ridge)
+    #print("ridge", rmse_ridge)
+    w_lasso, rmse_lasso = fit_with_function(X, y, Lasso, 11, 100)
+    print("lasso", rmse_lasso)
+    w_lasso, rmse_lasso = fit_with_function(X, y, Lasso, 11, 0.0001)
+    print("lasso", rmse_lasso)
+    w_lasso, rmse_lasso = fit_with_function(X, y, Lasso, 11, 0.00001)
+    print("lasso", rmse_lasso)
 
-class LinearRegression:
-    def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
-        self.X = X
-        self.y = y
-
-    def fit_linear(self) -> np.ndarray:
-        """
-            Fit the model with the basic linear regression and return the weights
-        """
-        return np.linalg.inv(self.X.T.dot(self.X)).dot(self.X.T.dot(self.y))
-
-    def fit_ridge(self, lambdas: list[float], n_folds: list[int], seed = 10) -> np.ndarray:
-        """
-            Fit the model using the ridge of task 1
-        """
-        fit = lambda X, y, λ : np.linalg.inv(X.T.dot(X) + λ*np.eye(X.shape[1])).dot(X.T.dot(y))
-        best_rmse = 100
-        best_w = None 
-        best_λ = None
-        best_fold = None
-        for λ in np.arange(lambdas[0], lambdas[1], 5):
-            print(f"seed: {seed}, lambda: {λ}", end="\r")
-            for fold in range(n_folds[0], n_folds[1]):
-                kf = KFold(n_splits=fold, shuffle=True, random_state=seed)
-                for train, test in kf.split(X):
-                    w = fit(self.X[train], self.y[train], λ)
-                    rmse = calculate_RMSE(w, self.X[test], self.y[test])
-                    if (best_rmse > rmse):
-                        best_rmse = rmse
-                        best_w = w
-                        best_λ = λ
-                        best_fold = fold
-        total_e = calculate_RMSE(best_w, self.X, self.y) 
-        print("seed:", seed, " rmse:", best_rmse, " λ:", best_λ, " kfold:", best_fold, " total_rmse:", total_e)
-        return best_w
+    #exit()
+    # TODO: Enter your code here
+    assert w_lasso.shape == (21,)
+    return w_lasso
 
 
 # Main function. You don't have to change this
