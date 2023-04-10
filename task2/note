@@ -1,0 +1,7 @@
+    # plt = Plot()
+    # target = "price_SVK"
+    # was_na_svw = test_df[target].isna().copy()
+    # plt.add(test_df[target], test_df["price_CHF"], label="Train Data", color=(1.0, 0.8, 0.0))
+    # plt.add(test_df.loc[was_na_svw, [target]][target], test_df.loc[was_na_svw, ["price_CHF"]]["price_CHF"], label="Missing", color="red")
+    # plt.save()
+    # plt.show() 
