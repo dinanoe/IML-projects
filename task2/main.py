@@ -1,15 +1,17 @@
-# This serves as a template which will guide you through the implementation of this task.  It is advised
-# to first read the whole template and get a sense of the overall structure of the code before trying to fill in any of the TODO gaps
-# First, we import necessary libraries:
-import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import KFold
-from sklearn.metrics import r2_score
+import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import PowerTransformer
 from sklearn.gaussian_process.kernels import DotProduct, RBF, Matern, RationalQuadratic
 
-from util import fill_with_avrege, convert_season
+from util import convert_season
+from plots import Plot
+from data import Data
+from constants import PRICES
+
+import random
+random.seed(1234)
 
 def data_loading():
     """
@@ -30,14 +32,29 @@ def data_loading():
     # Load test data
     test_df = pd.read_csv("data/test.csv")
 
-    # Fill the empty with the avrege
-    train_df= fill_with_avrege(train_df)
-    test_df = fill_with_avrege(test_df)
+    # Drop the values that don't have CHF
+    train_df = train_df.dropna(subset=['price_CHF'])
 
     # Convert season to number for the model
-    # TODO: Do somethins with the seasons since it will ifluence it for sure
     train_df["season"] = train_df["season"].apply(convert_season)
     test_df["season"] = test_df["season"].apply(convert_season)
+
+    #test_df = fill_linear(test_df)   
+
+    data = Data(noise=0.4)
+    #train_df = data.fill_na_train(train_df)
+    #test_df = data.fill_na_test(test_df)
+
+    plt = Plot()
+    # target = "price_SVK"
+    # was_na_svw = test_df[target].isna().copy()
+    for price in PRICES:
+        plt.add(test_df["price_AUS"], test_df[price], label=f"AUS/{price[-3:]}") #color=(1.0, 0.8, 0.0)
+    # plt.add(test_df.loc[was_na_svw, [target]][target], test_df.loc[was_na_svw, ["price_CHF"]]["price_CHF"], label="Missing", color="red")
+    # plt.save()
+    plt.show() 
+
+    exit()
 
     y_train = train_df['price_CHF']
     X_train = train_df.drop(['price_CHF'], axis=1)
@@ -46,7 +63,7 @@ def data_loading():
     assert (X_train.shape[1] == X_test.shape[1]) and (X_train.shape[0] == y_train.shape[0]) and (X_test.shape[0] == 100), "Invalid data shape"
     return X_train, y_train, X_test
 
-def modeling_and_prediction(X_train, y_train, X_test):
+def modeling_and_prediction(X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame):
     """
     This function defines the model, fits training data and then does the prediction with the test data 
 
@@ -60,28 +77,46 @@ def modeling_and_prediction(X_train, y_train, X_test):
     ----------
     y_test: array of floats: dim = (100,), predictions on test set
     """
-    #y_pred=np.zeros(X_test.shape[0])
+    #         "feature_names_in_": ["season", "price_AUS", "price_CZE", "price_GER", "price_ESP", "price_FRA", "price_UK", "price_ITA", "price_POL", "price_SVK"]
 
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    # Test the model on the fold
+    plt = Plot()
+    plt.add(X_train["price_GER"], y_train)
+    #plt.add(X_train["price_CZE"], y_train)
+    #plt.add(X_train["price_ESP"], y_train)
+    #plt.add(X_train["price_FRA"], y_train)
+    #plt.add(X_train["price_UK"], y_train)
+    #plt.add(X_train["price_ITA"], y_train)
+    #plt.add(X_train["price_POL"], y_train)
+    #plt.add(X_train["price_SVK"], y_train)
+    plt.show()
 
-    kf = KFold(n_splits=10)
-    for train, test in kf.split(X_train, y_train):  
-        model.fit(X_train.iloc[train], y_train.iloc[train])
-        y_pred = model.predict(X_train.iloc[test])
-        print(f"R2 score for test set linear: {r2_score(y_train.iloc[test], y_pred)}")
+    param_grid = {
+        'alpha': [10],
+        'kernel': [DotProduct()],  #, RBF(), Matern(, ), RationalQuadratic()],
+        "n_restarts_optimizer": [0], 
+    }
 
-    #gpr = GaussianProcessRegressor(kernel=DotProduct())
-    #gpr.max_iter = 100
-    #kf = KFold(n_splits=10)
-    #for train, test in kf.split(X_train, y_train):  
-    #    gpr.fit(X_train.iloc[train], y_train.iloc[train])
-    #    y_pred = model.predict(X_train.iloc[test])
-    #    print(f"R2 score for test set gpr: {r2_score(y_train.iloc[test], y_pred)}")
+    model = GaussianProcessRegressor()
+    grid_search = GridSearchCV(model, param_grid, cv=8, scoring="r2")
 
-    y_pred = model.predict(X_test)
-    
+    pt = PowerTransformer(method='yeo-johnson', standardize=False)
+
+
+    X_train_trasormed = pt.fit_transform(X_train)
+    # Remove feature names from X_train_transformed
+
+    grid_search.fit(X_train_trasormed, y_train.values)
+
+    print("Best parameters: ", grid_search.best_params_)
+    print("Best estimator: ", grid_search.best_estimator_)
+    print("Best score: ", grid_search.best_score_)
+
+    best_model = grid_search.best_estimator_
+
+    # pt = PowerTransformer(method='yeo-johnson', standardize=False)
+    # X_test_trasormed = pt.fit_transform(X_test)
+    y_pred = best_model.predict(X_test)
+
     assert y_pred.shape == (100,), "Invalid data shape"
     return y_pred
 
