@@ -10,6 +10,8 @@ from plots import Plot
 from data import Data
 from constants import PRICES
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import GridSearchCV
+import numpy as np
 
 import random
 random.seed(1234)
@@ -86,7 +88,26 @@ def modeling_and_prediction(X_train: pd.DataFrame, y_train: pd.Series, X_test: p
     y_test: array of floats: dim = (100,), predictions on test set
     """
 
-    gpr = GaussianProcessRegressor(kernel=Matern(length_scale=1.0, nu=1.5))
+    models = GaussianProcessRegressor()
+
+    param_grid = [{
+        "alpha": [1e-2, 1e-3],
+        "kernel": [RBF(l) for l in np.logspace(-1, 1, 2)]
+    }, {
+        "alpha": [1e-2, 1e-3],
+        "kernel": [DotProduct(sigma_0) for sigma_0 in np.logspace(-1, 1, 2)]
+    }, {
+        "alpha": [1e-2, 1e-3],
+        "kernel": [Matern(length_scale=1.0, nu=1.5)]
+    }]
+
+    clf = GridSearchCV(models, param_grid)
+    clf.fit(X_train, y_train)
+
+    alpha = clf.best_params_['alpha']
+    kernel = clf.best_params_['kernel']
+
+    gpr = GaussianProcessRegressor(alpha=alpha, kernel=kernel)
     gpr.fit(X_train, y_train)
 
     y_pred = gpr.predict(X_test)
