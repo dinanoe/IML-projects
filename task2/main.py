@@ -9,9 +9,27 @@ from util import convert_season
 from plots import Plot
 from data import Data
 from constants import PRICES
+from sklearn.preprocessing import LabelEncoder
 
 import random
 random.seed(1234)
+
+def data_imputation(train_df, test_df):
+    """
+    """
+    le = LabelEncoder()
+    label = le.fit_transform(train_df['season'])
+    label_test = le.fit_transform(test_df['season'])
+
+    train_df['season'] = label
+    test_df['season'] = label_test
+
+    for item in train_df.columns:
+        train_df[item] = train_df.groupby('season')[item].transform(lambda x: x.fillna(x.median()))
+    for item in test_df.columns:
+        test_df[item] = test_df.groupby('season')[item].transform(lambda x: x.fillna(x.median()))
+
+    return train_df, test_df
 
 def data_loading():
     """
@@ -33,28 +51,18 @@ def data_loading():
     test_df = pd.read_csv("data/test.csv")
 
     # Drop the values that don't have CHF
-    train_df = train_df.dropna(subset=['price_CHF'])
+    base = "price_CHF" #"price_CHF"
+    train_df = train_df.dropna(subset=[base])
 
     # Convert season to number for the model
     train_df["season"] = train_df["season"].apply(convert_season)
     test_df["season"] = test_df["season"].apply(convert_season)
 
-    #test_df = fill_linear(test_df)   
-
-    data = Data(noise=0.4)
-    #train_df = data.fill_na_train(train_df)
+    data = Data(noise=0, C=1, gamma=1)
+    train_df = data.fill_na_train(train_df)
     #test_df = data.fill_na_test(test_df)
 
-    plt = Plot()
-    # target = "price_SVK"
-    # was_na_svw = test_df[target].isna().copy()
-    for price in PRICES:
-        plt.add(test_df["price_AUS"], test_df[price], label=f"AUS/{price[-3:]}") #color=(1.0, 0.8, 0.0)
-    # plt.add(test_df.loc[was_na_svw, [target]][target], test_df.loc[was_na_svw, ["price_CHF"]]["price_CHF"], label="Missing", color="red")
-    # plt.save()
-    plt.show() 
-
-    exit()
+    _, test_df = data_imputation(train_df, test_df)
 
     y_train = train_df['price_CHF']
     X_train = train_df.drop(['price_CHF'], axis=1)
@@ -77,46 +85,12 @@ def modeling_and_prediction(X_train: pd.DataFrame, y_train: pd.Series, X_test: p
     ----------
     y_test: array of floats: dim = (100,), predictions on test set
     """
-    #         "feature_names_in_": ["season", "price_AUS", "price_CZE", "price_GER", "price_ESP", "price_FRA", "price_UK", "price_ITA", "price_POL", "price_SVK"]
 
-    plt = Plot()
-    plt.add(X_train["price_GER"], y_train)
-    #plt.add(X_train["price_CZE"], y_train)
-    #plt.add(X_train["price_ESP"], y_train)
-    #plt.add(X_train["price_FRA"], y_train)
-    #plt.add(X_train["price_UK"], y_train)
-    #plt.add(X_train["price_ITA"], y_train)
-    #plt.add(X_train["price_POL"], y_train)
-    #plt.add(X_train["price_SVK"], y_train)
-    plt.show()
+    gpr = GaussianProcessRegressor(kernel=Matern(length_scale=1.0, nu=1.5))
+    gpr.fit(X_train, y_train)
 
-    param_grid = {
-        'alpha': [10],
-        'kernel': [DotProduct()],  #, RBF(), Matern(, ), RationalQuadratic()],
-        "n_restarts_optimizer": [0], 
-    }
-
-    model = GaussianProcessRegressor()
-    grid_search = GridSearchCV(model, param_grid, cv=8, scoring="r2")
-
-    pt = PowerTransformer(method='yeo-johnson', standardize=False)
-
-
-    X_train_trasormed = pt.fit_transform(X_train)
-    # Remove feature names from X_train_transformed
-
-    grid_search.fit(X_train_trasormed, y_train.values)
-
-    print("Best parameters: ", grid_search.best_params_)
-    print("Best estimator: ", grid_search.best_estimator_)
-    print("Best score: ", grid_search.best_score_)
-
-    best_model = grid_search.best_estimator_
-
-    # pt = PowerTransformer(method='yeo-johnson', standardize=False)
-    # X_test_trasormed = pt.fit_transform(X_test)
-    y_pred = best_model.predict(X_test)
-
+    y_pred = gpr.predict(X_test)
+    
     assert y_pred.shape == (100,), "Invalid data shape"
     return y_pred
 
