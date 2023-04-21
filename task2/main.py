@@ -4,6 +4,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import PowerTransformer
 from sklearn.gaussian_process.kernels import DotProduct, RBF, Matern, RationalQuadratic
+from sklearn.impute import KNNImputer
 
 from util import convert_season
 from plots import Plot
@@ -57,14 +58,20 @@ def data_loading():
     train_df = train_df.dropna(subset=[base])
 
     # Convert season to number for the model
-    train_df["season"] = train_df["season"].apply(convert_season)
-    test_df["season"] = test_df["season"].apply(convert_season)
+    #train_df["season"] = train_df["season"].apply(convert_season)
+    #test_df["season"] = test_df["season"].apply(convert_season)
+
+    
+    train_df = train_df.drop(labels=['season'],axis=1)
+    test_df = test_df.drop(labels=['season'], axis=1)
 
     data = Data(noise=0, C=1, gamma=1)
     train_df = data.fill_na_train(train_df)
     #test_df = data.fill_na_test(test_df)
 
-    _, test_df = data_imputation(train_df, test_df)
+    #_, test_df = data_imputation(train_df, test_df)
+    imp = KNNImputer(n_neighbors=3)
+    test_df = pd.DataFrame(imp.fit_transform(test_df), columns = test_df.columns)
 
     y_train = train_df['price_CHF']
     X_train = train_df.drop(['price_CHF'], axis=1)
