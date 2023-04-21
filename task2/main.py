@@ -99,13 +99,16 @@ def modeling_and_prediction(X_train: pd.DataFrame, y_train: pd.Series, X_test: p
 
     param_grid = [{
         "alpha": [1e-2, 1e-3],
-        "kernel": [RBF(l) for l in np.logspace(-1, 1, 2)]
+        "kernel": [RBF(l) for l in np.logspace(-6, 1, 10)]
     }, {
         "alpha": [1e-2, 1e-3],
-        "kernel": [DotProduct(sigma_0) for sigma_0 in np.logspace(-1, 1, 2)]
+        "kernel": [DotProduct(sigma_0) for sigma_0 in np.logspace(-1, 4, 10)]
     }, {
         "alpha": [1e-2, 1e-3],
-        "kernel": [Matern(length_scale=1.0, nu=1.5)]
+        "kernel": [Matern(length_scale) for length_scale in np.logspace(-6,1,10)]
+    }, {
+        "alpha": [1e-2,1e-3],
+        "kernel": [RationalQuadratic(length_scale,alpha) for length_scale in np.logspace(-6,1,10) for alpha in np.logspace(-2,1,10)]
     }]
 
     clf = GridSearchCV(models, param_grid)
