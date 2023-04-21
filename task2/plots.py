@@ -33,9 +33,15 @@ class Plot:
     def show(self):
         if not self.created:
             self.create()
+        plt.ion()
         plt.show()
+        plt.waitforbuttonpress()
+        plt.ioff()
 
     def save(self):
         if not self.created:
             self.create()
-        plt.savefig(f'plots/{self.x_name}_{self.y_name}.png', dpi=100)
+        plt.savefig(f'regions/{self.x_name}_{self.y_name}.png', dpi=100)
+
+    def clear(self):
+        self.__init__()
