@@ -4,11 +4,14 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.impute import KNNImputer
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import DotProduct, RBF, Matern, RationalQuadratic
 
 def data_imputation(train_df, test_df):
+
+    """
     le = LabelEncoder()
     label = le.fit_transform(train_df['season'])
     label_test = le.fit_transform(test_df['season'])
@@ -20,6 +23,11 @@ def data_imputation(train_df, test_df):
         train_df[item] = train_df.groupby('season')[item].transform(lambda x: x.fillna(x.median()))
     for item in test_df.columns:
         test_df[item] = test_df.groupby('season')[item].transform(lambda x: x.fillna(x.median()))
+    """
+
+    imputer = KNNImputer(n_neighbors=2, weights="uniform")
+    train_df = imputer.fit_transform(train_df)
+    test_df = imputer.fit_transform(test_df)
 
     return train_df, test_df
 
@@ -77,7 +85,23 @@ def modeling_and_prediction(X_train, y_train, X_test):
     y_test: array of floats: dim = (100,), predictions on test set
     """
 
-    gpr = GaussianProcessRegressor(kernel=Matern(length_scale=1.0, nu=1.5))
+    models = GaussianProcessRegressor()
+
+    param_grid = [{
+        "alpha": [1e-2, 1e-3],
+        "kernel": [RBF(l) for l in np.logspace(-1, 1, 2)]
+    }, {
+        "alpha": [1e-2, 1e-3],
+        "kernel": [DotProduct(sigma_0) for sigma_0 in np.logspace(-1, 1, 2)]
+    }, {
+        "alpha": [1e-2, 1e-3],
+        "kernel": [Matern(length_scale=1.0, nu=1.5)]
+    }, {
+        "alpha": [1e-2, 1e-3],
+        "kernel": [Matern(length_scale=1.0, nu=1.5)]
+    }, ]
+
+    gpr = GaussianProcessRegressor(kernel=Matern(length_scale=1.0, nu=1.5), alpha=0.01)
     gpr.fit(X_train, y_train)
 
     y_pred = gpr.predict(X_test)
