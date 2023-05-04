@@ -10,6 +10,8 @@ from torchvision import transforms
 import torchvision.datasets as datasets
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+from torchvision.models import resnet18, ResNet18_Weights
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -19,29 +21,55 @@ def generate_embeddings():
     Transform, resize and normalize the images and then use a pretrained model to extract 
     the embeddings.
     """
-    # TODO: define a transform to pre-process the images
-    train_transforms = transforms.Compose([transforms.ToTensor()])
+
+    # Automatic transformation via pre_trained weights of the model
+    resnet18(weights=ResNet18_Weights.DEFAULT)
+    weights = ResNet18_Weights.DEFAULT
+    train_transforms = transforms.Compose([transforms.ToTensor(), weights.transforms()])
 
     train_dataset = datasets.ImageFolder(root="dataset/", transform=train_transforms)
     # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't 
     # run out of memory
     train_loader = DataLoader(dataset=train_dataset,
-                              batch_size=64,
+                              batch_size=16,
                               shuffle=False,
-                              pin_memory=True, num_workers=16)
+                              pin_memory=True, num_workers=4)
 
-    # TODO: define a model for extraction of the embeddings (Hint: load a pretrained model,
-    #  more info here: https://pytorch.org/vision/stable/models.html)
-    model = nn.Module()
-    embeddings = []
-    embedding_size = 1000 # Dummy variable, replace with the actual embedding size once you 
-    # pick your model
-    num_images = len(train_dataset)
-    embeddings = np.zeros((num_images, embedding_size))
-    # TODO: Use the model to extract the embeddings. Hint: remove the last layers of the 
-    # model to access the embeddings the model generates. 
+    # I chose the model resnet18
+    model = torchvision.models.resnet18(pretrained=True)
+    # setting the model to eval mode
+    model.eval()
 
-    np.save('dataset/embeddings.npy', embeddings)
+    batch_size = 16
+    samples = 10000
+    features = 512
+
+    # initializing the embedding matrix
+    embeddings_mat = np.zeros((samples, features))
+
+    # set last layer "FC" to the identity layer so the last layer is "avgpool" that gives the 256 features vector
+    model.fc = torch.nn.Identity()
+
+    # encoder loop that saves the batch embeddings in the embedding matrix
+    counter = 0
+    with torch.no_grad():
+        print('start check')
+        for batch_idx, (features, _) in enumerate(train_loader):
+            batch_embedding = model(features)
+            batch_embedding_np = batch_embedding.detach().numpy()
+            for i in range(batch_size):
+                embeddings_mat[batch_size * batch_idx + i] = batch_embedding_np[i]
+
+            print(counter)
+
+            counter += 1
+
+            # if counter == 10:
+            # break
+
+    print(embeddings_mat.shape)
+
+    np.save('dataset/embeddings.npy', embeddings_mat)
 
 
 def get_data(file, train=True):
