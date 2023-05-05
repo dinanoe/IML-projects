@@ -47,7 +47,7 @@ def generate_embeddings():
     # initializing the embedding matrix
     embeddings_mat = np.zeros((samples, features))
 
-    # set last layer "FC" to the identity layer so the last layer is "avgpool" that gives the 256 features vector
+    # set last layer "FC" to the identity layer so the last layer is "avgpool" that gives the 512 features vector
     model.fc = torch.nn.Identity()
 
     # encoder loop that saves the batch embeddings in the embedding matrix
