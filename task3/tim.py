@@ -98,7 +98,7 @@ def get_data(file, train=True):
     filenames = [s[0].split('\\')[-1].replace('.jpg', '') for s in train_dataset.samples]
     embeddings = np.load('dataset/embeddings.npy')
 
-    embeddings = normalize(embeddings, axis=1, norm='l1')
+    embeddings = normalize(embeddings, axis=1, norm='l2')
 
     file_to_embedding = {}
     for i in range(len(filenames)):
@@ -119,7 +119,7 @@ def get_data(file, train=True):
 
     if train == True:
 
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.01, random_state=1)
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.05, random_state=1)
 
         #print(X_train.shape, X_val.shape, y_train.shape, y_val.shape)
 
@@ -182,8 +182,7 @@ class Net(nn.Module):
         # Simple model with 3 linear layers with relu layers
         super().__init__()
         self.fc1 = nn.Linear(1536, 768)
-        self.fc2 = nn.Linear(768, 384)
-        self.fc3 = nn.Linear(384, 1)
+        self.fc2 = nn.Linear(768, 1)
 
     def forward(self, x):
         """
@@ -194,10 +193,8 @@ class Net(nn.Module):
         output: x: torch.Tensor, the output of the model
         """
         x = self.fc1(x)
-        x = F.relu(x)
+        x = torch.relu(x)
         x = self.fc2(x)
-        x = F.relu(x)
-        x = self.fc3(x)
         x = torch.sigmoid(x)
         return x
 
@@ -213,7 +210,7 @@ def train_model(train_loader, val_loader):
     """
     model = Net()
     model.to(device)
-    n_epochs = 20
+    n_epochs = 5
     optimizer = optim.Adam(model.parameters(), lr=1e-3)  # I Chose the Adam optimizer
     loss_function = nn.BCELoss()  # Binary Cross-Entropy loss for binary classification
     train_batch_losses = []
@@ -228,12 +225,13 @@ def train_model(train_loader, val_loader):
     # on the validation data before submitting the results on the server. After choosing the 
     # best model, train it on the whole training data.
     for epochs in range(n_epochs):
-
         for data, label in tqdm.tqdm(train_loader,colour='green', desc='Train Epoch {}'.format(epochs), bar_format='{l_bar}{bar:50}{r_bar}{bar:-10b}'):
+            #print(data.shape)
             model.train()
             optimizer.zero_grad()
             output = model(data)
             label = label.float()
+            #print(output.shape)
             loss = loss_function(output, label.unsqueeze(1))
             train_batch_losses.append(loss)
             loss.backward()
@@ -243,8 +241,8 @@ def train_model(train_loader, val_loader):
         train_epoch_losses.append(train_epoch_loss.detach().numpy())
         print('Training loss {}'.format(train_epoch_loss))
 
-        for data, label in tqdm.tqdm(val_loader, desc='Validation Epoch {}'.format(epochs), colour = 'blue', bar_format='{l_bar}{bar:50}{r_bar}{bar:-10b}'):
-            with torch.no_grad():
+        with torch.no_grad():
+            for data, label in tqdm.tqdm(val_loader, desc='Validation Epoch {}'.format(epochs), colour = 'blue', bar_format='{l_bar}{bar:50}{r_bar}{bar:-10b}'):
                 model.eval()
                 output = model(data)
                 label = label.float()
@@ -317,7 +315,7 @@ if __name__ == '__main__':
     #print(X_test.shape)
 
     # Create data loaders for the training and testing data
-    train_loader, val_loader = create_loader_from_np(X_train, X_val, y_train, y_val, train = True, batch_size=16)
+    train_loader, val_loader = create_loader_from_np(X_train, X_val, y_train, y_val, train = True, batch_size=32)
     test_loader = create_loader_from_np(X_test, train = False, batch_size=2048, shuffle=False)
 
     # define a model and train it
