@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
@@ -93,8 +93,10 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
     # TODO: Implement the training loop. The model should be trained on the pretraining data. Use validation set 
     # to monitor the loss.
 
-    training_loader = torch.utils.data.DataLoader(list(zip(x_tr, y_tr)), shuffle=True, batch_size=batch_size)
-    validation_loader = torch.utils.data.DataLoader(list(zip(x_val, y_val)), batch_size=batch_size, shuffle=False)
+    train_dataset = TensorDataset(x_tr, y_tr)
+
+    training_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
+    validation_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
 
     n_epochs = 5
     optimizer = optim.Adam(model.parameters(), lr=1e-3)  # I Chose the Adam optimizer
