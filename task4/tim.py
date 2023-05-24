@@ -11,10 +11,14 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import StandardScaler
 
 import torch.optim as optim
 import torch.nn.functional as F
 import tqdm
+from sklearn.svm import SVR
+
+import matplotlib.pyplot as plt
 
 
 
@@ -46,10 +50,12 @@ class Net(nn.Module):
         The constructor of the model.
         """
         super().__init__()
-        # TODO: Define the architecture of the model. It should be able to be trained on pretraing data 
+        # TODO: Define the architecture of the model. It should be able to be trained on pretraing data
         # and then used to extract features from the training and test data.
         self.linear1 = nn.Linear(1000, 500)
-        self.linear2 = nn.Linear(500, 1)
+        self.linear2 = nn.Linear(500, 250)
+        self.linear3 = nn.Linear(250, 125)
+        self.linear4 = nn.Linear(125, 1)
 
 
     def forward(self, x):
@@ -60,11 +66,13 @@ class Net(nn.Module):
 
         output: x: torch.Tensor, the output of the model
         """
-        # TODO: Implement the forward pass of the model, in accordance with the architecture 
+        # TODO: Implement the forward pass of the model, in accordance with the architecture
         # defined in the constructor.
 
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
+        x = self.linear4(x)
 
         return x
     
@@ -98,7 +106,7 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
     training_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
     validation_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
 
-    n_epochs = 5
+    n_epochs = 20
     optimizer = optim.Adam(model.parameters(), lr=1e-3)  # I Chose the Adam optimizer
     loss_function = nn.MSELoss()  # Mean-squared error loss
     train_batch_losses = []
@@ -147,12 +155,36 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
         further in the pipeline
         """
         model.eval()
-        features = model(x)
         # TODO: Implement the feature extraction, a part of a pretrained model used later in the pipeline.
 
-        return features
+        # initializing the embedding matrix
+        features_mat = np.zeros(x.shape)
 
-    return make_features
+        # set last layer "FC" to the identity layer so the last layer is "avgpool" that gives the 512 features vector
+        model.linear4 = torch.nn.Identity()
+
+        x_train = torch.tensor(x, dtype=torch.float)
+
+        train_dataset = TensorDataset(x_train)
+
+        training_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=1)
+
+        # encoder loop that saves the batch embeddings in the embedding matrix
+        with torch.no_grad():
+            print('start check')
+            for i, features in enumerate(training_loader):
+                # print(features)
+                batch_embedding = model(features[0])
+                # print(batch_idx)
+                batch_embedding_np = batch_embedding.detach().numpy()
+                # print(batch_embedding_np[0])
+
+                for j in range(len(batch_embedding[0])):
+                    features_mat[i][j] = batch_embedding_np[0][j]
+
+        return features_mat
+
+    return make_features, train_epoch_losses, val_epoch_losses, n_epochs
 
 def make_pretraining_class(feature_extractors):
     """
@@ -190,9 +222,26 @@ def get_regression_model():
     output: model: sklearn compatible model, the regression model
     """
     # TODO: Implement the regression model. It should be able to be trained on the features extracted
-    # by the feature extractor.
-    model = LinearRegression()
+    model = SVR(kernel='rbf')
+
     return model
+
+def plot_loss(train_epoch_losses, val_epoch_losses, n_epochs):
+
+    x = np.linspace(0,n_epochs, n_epochs)
+    train_loss = train_epoch_losses
+    val_loss = val_epoch_losses
+
+    plt.plot(x, train_loss, color='r', label='train_loss')
+    plt.plot(x, val_loss, color='g', label='val_loss')
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Train and Validation loss")
+
+    plt.legend()
+
+    plt.show()
 
 # Main function. You don't have to change this
 if __name__ == '__main__':
@@ -201,9 +250,9 @@ if __name__ == '__main__':
     print("Data loaded!")
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
-    feature_extractor = make_feature_extractor(x_pretrain, y_pretrain)
+    feature_extractor, train_epoch_loss, val_epoch_loss, epochs = make_feature_extractor(x_pretrain, y_pretrain)
     PretrainedFeatureClass = make_pretraining_class({"pretrain": feature_extractor})
-    
+    plot_loss(train_epoch_loss, val_epoch_loss, epochs)
     # regression model
     regression_model = get_regression_model()
 
@@ -211,7 +260,12 @@ if __name__ == '__main__':
     # TODO: Implement the pipeline. It should contain feature extraction and regression. You can optionally
     # use other sklearn tools, such as StandardScaler, FunctionTransformer, etc.
 
-    pipe = Pipeline([('feature_extractor', PretrainedFeatureClass),('regression_model', regression_model)])
+    pipe = Pipeline([('Scaler', StandardScaler()),("pretrain", PretrainedFeatureClass(feature_extractor='pretrain')), ('regression', regression_model)])
+
+    pipe.fit(x_train, y_train)
+    x_test_values = x_test.iloc[:,:].values
+    y_pred = pipe.predict(x_test_values)
+
 
     assert y_pred.shape == (x_test.shape[0],)
     y_pred = pd.DataFrame({"y": y_pred}, index=x_test.index)
