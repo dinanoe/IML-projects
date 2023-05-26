@@ -20,6 +20,13 @@ from sklearn.svm import SVR
 
 import matplotlib.pyplot as plt
 
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression, Lasso, ElasticNet
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
 
 
 def load_data():
@@ -52,10 +59,11 @@ class Net(nn.Module):
         super().__init__()
         # TODO: Define the architecture of the model. It should be able to be trained on pretraing data
         # and then used to extract features from the training and test data.
+
         self.linear1 = nn.Linear(1000, 500)
         self.linear2 = nn.Linear(500, 250)
-        self.linear3 = nn.Linear(250, 125)
-        self.linear4 = nn.Linear(125, 1)
+        self.linear3 = nn.Linear(250, 10)
+        self.linear4 = nn.Linear(10, 1)
 
 
     def forward(self, x):
@@ -76,7 +84,7 @@ class Net(nn.Module):
 
         return x
     
-def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
+def make_feature_extractor(x, y, batch_size=20, eval_size=1000):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
     can be used to extract features from the training and test data.
@@ -106,7 +114,7 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
     training_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
     validation_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
 
-    n_epochs = 20
+    n_epochs = 1
     optimizer = optim.Adam(model.parameters(), lr=1e-3)  # I Chose the Adam optimizer
     loss_function = nn.MSELoss()  # Mean-squared error loss
     train_batch_losses = []
@@ -158,10 +166,12 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
         model.eval()
         # TODO: Implement the feature extraction, a part of a pretrained model used later in the pipeline.
 
-        # initializing the embedding matrix
-        features_mat = np.zeros(x.shape)
+        number_of_features = 10
+        length = len(x)
 
-        # set last layer "FC" to the identity layer so the last layer is "avgpool" that gives the 512 features vector
+        # initializing the embedding matrix
+        features_mat = np.zeros((length, number_of_features))
+
         model.linear4 = torch.nn.Identity()
 
         x_train = torch.tensor(x, dtype=torch.float)
@@ -175,13 +185,13 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
             print('start check')
             for i, features in enumerate(training_loader):
                 # print(features)
-                batch_embedding = model(features[0])
+                batch_embedding = model(features[0])[0]
                 # print(batch_idx)
                 batch_embedding_np = batch_embedding.detach().numpy()
                 # print(batch_embedding_np[0])
 
-                for j in range(len(batch_embedding[0])):
-                    features_mat[i][j] = batch_embedding_np[0][j]
+                for j in range(len(batch_embedding)):
+                    features_mat[i][j] = batch_embedding_np[j]
 
         return features_mat
 
@@ -223,9 +233,38 @@ def get_regression_model():
     output: model: sklearn compatible model, the regression model
     """
     # TODO: Implement the regression model. It should be able to be trained on the features extracted
-    model = SVR(kernel='rbf')
+    pipelines = []
+    pipelines.append(('ScaledLR', Pipeline([('Scaler', StandardScaler()), ('LR', LinearRegression())])))
+    pipelines.append(('ScaledLASSO', Pipeline([('Scaler', StandardScaler()), ('LASSO', Lasso())])))
+    pipelines.append(('ScaledEN', Pipeline([('Scaler', StandardScaler()), ('EN', ElasticNet())])))
+    pipelines.append(('ScaledKNN', Pipeline([('Scaler', StandardScaler()), ('KNN', KNeighborsRegressor())])))
+    pipelines.append(('ScaledCART', Pipeline([('Scaler', StandardScaler()), ('CART', DecisionTreeRegressor())])))
+    pipelines.append(('ScaledGBM', Pipeline([('Scaler', StandardScaler()), ('GBM', GradientBoostingRegressor())])))
 
-    return model
+    pipelines = [x[1] for x in pipelines]
+
+    class AveragingModels(BaseEstimator, RegressorMixin, TransformerMixin):
+        def __init__(self, models):
+            self.models = models
+
+        # we define clones of the original models to fit the data in
+        def fit(self, X, y):
+            self.models_ = [clone(x) for x in self.models]
+
+            # Train cloned base models
+            for model in self.models_:
+                model.fit(X, y)
+
+            return self
+
+        # Now we do the predictions for cloned models and average them
+        def predict(self, X):
+            predictions = np.column_stack([
+                model.predict(X) for model in self.models_
+            ])
+            return np.mean(predictions, axis=1)
+
+    return AveragingModels(models=(pipelines))
 
 def plot_loss(train_epoch_losses, val_epoch_losses, n_epochs):
 
