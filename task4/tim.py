@@ -131,6 +131,7 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
         train_epoch_losses.append(train_epoch_loss.detach().numpy())
         print('Training loss {}'.format(train_epoch_loss))
 
+        # IMPLEMENT THIS
         with torch.no_grad():
             for data, label in tqdm.tqdm(validation_loader, desc='Validation Epoch {}'.format(epochs), colour = 'blue', bar_format='{l_bar}{bar:50}{r_bar}{bar:-10b}'):
                 model.eval()
